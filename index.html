@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fitness Tracker — Connected Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  /* ===== LOCKED DESIGN TOKENS (same as before, never change these) ===== */
+  :root{
+    --bg: #0B0E14;
+    --glass: rgba(255,255,255,0.055);
+    --glass-border: rgba(255,255,255,0.09);
+    --accent: #C8FF4D;
+    --accent-dim: rgba(200,255,77,0.14);
+    --blue: #4DA8FF;
+    --blue-dim: rgba(77,168,255,0.14);
+    --text: #F4F5F2;
+    --text-dim: #8B8F9B;
+    --text-faint: #5A5E68;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: radial-gradient(circle at 20% -10%, #151a24 0%, var(--bg) 45%);
+    font-family: var(--font-body);
+    color: var(--text);
+    display:flex;
+    justify-content:center;
+    padding: 40px 16px;
+    min-height: 100vh;
+  }
+  .phone{
+    width: 390px;
+    max-width: 100%;
+    background: #05070A;
+    border-radius: 40px;
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 14px;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.5);
+  }
+  .screen{
+    background: var(--bg);
+    border-radius: 28px;
+    padding: 24px 18px;
+    height: 780px;
+    position: relative;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  .screen::-webkit-scrollbar{ display:none; }
+  .glow{
+    position:absolute; top:-80px; right:-80px; width:260px; height:260px;
+    background: var(--accent); opacity:0.12; filter: blur(80px); border-radius:50%;
+    pointer-events:none; animation: drift 7s ease-in-out infinite;
+  }
+  @keyframes drift{
+    0%,100%{ transform: translate(0,0); opacity:0.12; }
+    50%{ transform: translate(-14px, 12px); opacity:0.18; }
+  }
+  .view{ display:none; }
+  .view.active{ display:block; animation: fadein 0.3s ease; }
+  @keyframes fadein{ from{ opacity:0; transform: translateY(6px); } to{ opacity:1; transform:translateY(0); } }
+
+  .top-row{ display:flex; justify-content:space-between; align-items:flex-start; }
+  .eyebrow{
+    font-family: var(--font-mono); font-size:11px; letter-spacing:0.14em;
+    text-transform:uppercase; color: var(--accent); text-align:left;
+  }
+  .exit{
+    font-family: var(--font-mono); font-size:11px; color: var(--text-dim);
+    border: 1px solid var(--glass-border); border-radius:8px; padding:6px 10px;
+    cursor:pointer; transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s cubic-bezier(.34,1.56,.64,1);
+  }
+  .exit:hover{ border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+  .exit:active{ border-color: var(--accent); color: var(--accent); transform: scale(0.93); }
+  h1{
+    font-family: var(--font-display); font-weight:700; font-size:24px;
+    text-align:left; margin-top:8px; line-height:1.15; transition: opacity 0.25s ease;
+  }
+  .sub{ font-size:12.5px; color: var(--text-dim); text-align:left; margin-top:4px; max-width:260px; transition: opacity 0.25s ease; }
+  .db-status{ font-family: var(--font-mono); font-size:10.5px; margin-top:8px; text-align:left; color: var(--text-faint); }
+  .db-status.ok{ color: var(--accent); }
+  .db-status.error{ color: #ff8a8a; }
+
+  .card{
+    background: var(--glass); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-radius: 20px; padding: 18px; margin-top: 18px;
+  }
+  .card-title{ font-family: var(--font-display); font-weight:500; font-size:14px; text-align:left; }
+  .card-title span{ color: var(--text-dim); font-weight:400; font-family: var(--font-body); font-size:12px; }
+  .week-row{ display:flex; justify-content:space-between; margin-top:14px; }
+  .day{ display:flex; flex-direction:column; align-items:center; gap:6px; flex:1; }
+  .day-label{ font-size:10px; color: var(--text-faint); font-family: var(--font-mono); }
+  .dot{
+    width:26px; height:26px; border-radius:50%; border: 1px solid var(--glass-border);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .dot.done{ background: var(--accent-dim); border-color: var(--accent); }
+  .dot.done::after{ content:''; width:8px; height:8px; border-radius:50%; background: var(--accent); }
+  .dot.rest{ opacity:0.35; }
+  .dot.workout-day{ border-color: rgba(200,255,77,0.4); }
+  .dot.today{ border-color: var(--blue); border-width:2px; box-shadow: 0 0 0 3px var(--blue-dim); animation: todayBreathe 2.6s ease-in-out infinite; }
+  @keyframes todayBreathe{
+    0%,100%{ box-shadow: 0 0 0 3px var(--blue-dim); }
+    50%{ box-shadow: 0 0 0 6px rgba(77,168,255,0.08); }
+  }
+  .dot.today::before{ content:''; width:6px; height:6px; border-radius:50%; background: var(--blue); }
+  .dot.today.done{ border-color: var(--accent); }
+  .dot.today.done::before{ display:none; }
+  .day-label.today-label{ color: var(--blue); }
+  .streak-line{
+    display:flex; align-items:baseline; gap:8px; margin-top:16px;
+    padding-top:14px; border-top:1px solid var(--glass-border);
+  }
+  .streak-num{ font-family: var(--font-mono); font-weight:600; font-size:22px; color:var(--accent); }
+  .streak-text{ font-size:12px; color: var(--text-dim); transition: opacity 0.2s ease; }
+  .stat-grid{ display:flex; gap:10px; margin-top:14px; }
+  .stat{
+    flex:1; background: rgba(255,255,255,0.03); border:1px solid var(--glass-border);
+    border-radius:14px; padding:12px 10px; text-align:left;
+  }
+  .stat-label{ font-size:10.5px; color:var(--text-dim); line-height:1.3; }
+  .stat-value{ font-family: var(--font-mono); font-size:17px; font-weight:600; margin-top:6px; color:var(--text); }
+  .stat-input{
+    width:46px; margin-top:6px; background: transparent; border:none; border-bottom:1px solid var(--glass-border);
+    padding:2px 0 4px; color: var(--text); font-family: var(--font-mono); font-size:19px; font-weight:600;
+    transition: border-color 0.25s ease, transform 0.2s ease;
+  }
+  .stat-input::placeholder{ color: var(--text-faint); }
+  .stat-input:focus{ outline:none; border-color: var(--accent); transform: translateY(-1px); }
+  .stat-unit{ font-family: var(--font-mono); font-size:10.5px; color: var(--text-faint); margin-left:3px; }
+  .placeholder-note{ margin-top:14px; font-size:10.5px; color: var(--text-faint); text-align:left; font-style:italic; }
+
+  .cta{
+    margin-top: 22px; background: var(--accent); color: #10160A; font-family: var(--font-display);
+    font-weight:700; font-size:14px; text-align:center; padding:16px; border-radius:16px;
+    cursor:pointer; transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), box-shadow 0.3s ease;
+    animation: ctaBreathe 3.2s ease-in-out infinite;
+  }
+  @keyframes ctaBreathe{
+    0%,100%{ box-shadow: 0 0 0 rgba(200,255,77,0); }
+    50%{ box-shadow: 0 4px 18px rgba(200,255,77,0.18); }
+  }
+  .cta:hover{ box-shadow: 0 8px 28px rgba(200,255,77,0.32); transform: translateY(-3px); animation-play-state:paused; }
+  .cta:active{ transform: translateY(-1px) scale(0.96); }
+
+  .cta-secondary{
+    margin-top: 10px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--glass-border);
+    font-family: var(--font-display);
+    font-weight:500;
+    font-size:13px;
+    text-align:center;
+    padding:13px;
+    border-radius:16px;
+    cursor:pointer;
+    transition: border-color 0.25s ease, color 0.25s ease, transform 0.25s cubic-bezier(.34,1.56,.64,1), background 0.25s ease;
+  }
+  .cta-secondary:hover{ border-color: var(--accent); color: var(--accent); transform: translateY(-2px); background: rgba(200,255,77,0.05); }
+  .cta-secondary:active{ transform: translateY(0) scale(0.96); }
+  .cta.disabled, .cta-secondary.disabled{
+    opacity:0.4; pointer-events:none; animation:none;
+  }
+
+  .timer-bar{
+    margin-top:16px; background: var(--glass); border:1px solid var(--glass-border);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-radius:16px; padding:0 16px; display:flex; align-items:center;
+    justify-content:space-between; opacity:0; max-height:0; overflow:hidden;
+    transition: opacity 0.35s ease, max-height 0.35s ease, padding 0.35s ease, border-color 0.3s ease;
+  }
+  .timer-bar.active{ opacity:1; max-height:100px; padding:14px 16px; }
+  .timer-bar.complete{
+    border-color: var(--accent);
+    animation: timerPulse 0.7s ease 2;
+  }
+  @keyframes timerPulse{
+    0%{ box-shadow: 0 0 0 rgba(200,255,77,0); }
+    50%{ box-shadow: 0 0 22px rgba(200,255,77,0.35); }
+    100%{ box-shadow: 0 0 0 rgba(200,255,77,0); }
+  }
+  .timer-left{ display:flex; flex-direction:column; text-align:left; }
+  .timer-label{ font-size:10.5px; color: var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; transition: color 0.3s ease; }
+  .timer-num{ font-family: var(--font-mono); font-size:26px; font-weight:600; color: var(--accent); }
+  .timer-bar.complete .timer-label{ color: var(--accent); }
+  .timer-skip{
+    font-family: var(--font-mono); font-size:11px; color: var(--text-dim);
+    border:1px solid var(--glass-border); border-radius:10px; padding:8px 12px; cursor:pointer;
+    transition: transform 0.2s cubic-bezier(.34,1.56,.64,1), border-color 0.2s ease;
+  }
+  .timer-skip:active{ transform: scale(0.94); border-color: var(--accent); }
+
+  .exercise{
+    margin-top:16px; background: var(--glass); border:1px solid var(--glass-border);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-radius:20px; padding:16px 24px 18px 16px; text-align:left; transition: border-color 0.3s ease;
+    animation: exerciseIn 0.4s cubic-bezier(.22,1,.36,1);
+  }
+  @keyframes exerciseIn{
+    from{ opacity:0; transform: translateY(10px); }
+    to{ opacity:1; transform: translateY(0); }
+  }
+  .exercise.current{ border-color: var(--accent); }
+  .ex-head{ display:flex; justify-content:space-between; align-items:baseline; }
+  .ex-name{ font-family: var(--font-display); font-weight:500; font-size:15px; }
+  .ex-target{ font-size:11px; color: var(--text-dim); font-family: var(--font-mono); }
+  .ex-muscle{ font-size:11px; color: var(--text-faint); margin-top:2px; }
+  .set-block{ margin-top:14px; }
+  .set-row{ display:flex; align-items:center; gap:8px; }
+  .set-tag{ font-family: var(--font-mono); font-size:11px; color: var(--text-dim); width:38px; flex-shrink:0; }
+  .set-input{
+    flex:1; min-width:0; background: rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+    border-radius:10px; padding:10px 12px; color: var(--text); font-family: var(--font-mono);
+    font-size:16px; text-align:center; transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
+  }
+  .set-input::placeholder{ color: var(--text-faint); }
+  .set-input:focus{ outline:none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-dim); transform: scale(1.015); }
+  .set-check{
+    width:34px; height:34px; border-radius:10px; flex-shrink:0; margin-right:2px;
+    border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center;
+    font-size:15px; color: var(--text-faint); cursor:pointer;
+    transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+  }
+  .set-check:active{ transform: scale(0.85); }
+  .set-check.done{ background: var(--accent-dim); border-color: var(--accent); color: var(--accent); animation: checkPop 0.35s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes checkPop{
+    0%{ transform: scale(0.7); }
+    60%{ transform: scale(1.15); }
+    100%{ transform: scale(1); }
+  }
+  .note-row{ margin-top:6px; padding-left:46px; }
+  .note-label{ font-size:10px; color: var(--text-faint); margin-bottom:4px; }
+  .note-input{
+    width:100%; background: transparent; border:1px dashed var(--glass-border);
+    border-radius:10px; padding:8px 12px; color: var(--text-dim); font-family: var(--font-body);
+    font-size:13px; transition: border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .note-input::placeholder{ color: var(--text-faint); }
+  .note-input:focus{ outline:none; border-color: var(--blue); color: var(--text); box-shadow: 0 0 0 3px var(--blue-dim); }
+  .progress-dots{ display:flex; gap:5px; margin-top:14px; }
+  .pdot{ height:4px; flex:1; border-radius:4px; background: rgba(255,255,255,0.08); transition: background 0.4s ease; animation: dotFade 0.4s ease backwards; }
+  .pdot:nth-child(1){ animation-delay:0.02s; } .pdot:nth-child(2){ animation-delay:0.06s; }
+  .pdot:nth-child(3){ animation-delay:0.10s; } .pdot:nth-child(4){ animation-delay:0.14s; }
+  .pdot:nth-child(5){ animation-delay:0.18s; } .pdot:nth-child(6){ animation-delay:0.22s; }
+  .pdot:nth-child(7){ animation-delay:0.26s; }
+  @keyframes dotFade{ from{ opacity:0; transform: scaleX(0.6); } to{ opacity:1; transform: scaleX(1); } }
+  .pdot.done{ background: var(--accent); }
+  .pdot.now{ background: var(--blue); }
+  .filler-note{ margin-top:12px; font-size:10.5px; color: var(--text-faint); text-align:left; font-style:italic; }
+
+  .splash{
+    position:absolute; inset:0; z-index:20;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+    background: radial-gradient(circle at 50% 40%, rgba(200,255,77,0.10), var(--bg) 70%);
+    opacity:0; pointer-events:none; transition: opacity 0.3s ease;
+  }
+  .splash.active{ opacity:1; pointer-events:auto; }
+  .splash.fade-out{ opacity:0; }
+  .splash-check{
+    width:76px; height:76px; border-radius:50%; background: var(--accent-dim);
+    border:2px solid var(--accent); color: var(--accent); font-size:34px;
+    display:flex; align-items:center; justify-content:center;
+    animation: splashPop 0.5s cubic-bezier(.34,1.56,.64,1);
+    box-shadow: 0 0 40px rgba(200,255,77,0.25);
+  }
+  @keyframes splashPop{
+    0%{ transform: scale(0.4); opacity:0; }
+    60%{ transform: scale(1.1); opacity:1; }
+    100%{ transform: scale(1); }
+  }
+  .splash-text{
+    font-family: var(--font-display); font-weight:700; font-size:24px; color: var(--text);
+    animation: splashRise 0.5s ease 0.1s backwards;
+  }
+  .splash-sub{
+    font-family: var(--font-mono); font-size:12px; color: var(--text-dim);
+    animation: splashRise 0.5s ease 0.2s backwards;
+  }
+  @keyframes splashRise{
+    from{ opacity:0; transform: translateY(8px); }
+    to{ opacity:1; transform: translateY(0); }
+  }
+
+  .day-tabs{ display:flex; flex-wrap:wrap; gap:8px; margin-top:18px; }
+  .day-tab{
+    flex:1 1 28%; text-align:center; font-family: var(--font-mono); font-size:12px;
+    color: var(--text-dim); border:1px solid var(--glass-border); border-radius:12px;
+    padding:9px 4px; cursor:pointer; transition: border-color 0.25s ease, color 0.25s ease, background 0.25s ease, transform 0.25s cubic-bezier(.34,1.56,.64,1);
+  }
+  .day-tab:hover{ border-color: var(--accent); color: var(--accent); }
+  .day-tab.active{ border-color: var(--accent); color: var(--accent); background: var(--accent-dim); transform: translateY(-1px); }
+  .day-tab.ghost{ border-style: dashed; color: var(--text-faint); font-size:10.5px; }
+  .day-tab.ghost:hover{ border-color: var(--accent); color: var(--accent); background: rgba(200,255,77,0.05); }
+
+  .day-header{ display:flex; justify-content:space-between; align-items:center; margin-top:16px; }
+  .day-header-name{ font-family: var(--font-display); font-weight:600; font-size:14px; color: var(--text); }
+  .remove-day{
+    font-family: var(--font-mono); font-size:10.5px; color: var(--text-faint); cursor:pointer;
+    transition: color 0.2s ease;
+  }
+  .remove-day:hover{ color: #ff8a8a; }
+
+  .edit-card{
+    margin-top:14px; background: var(--glass); border:1px solid var(--glass-border);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    border-radius:18px; padding:14px; text-align:left;
+    animation: exerciseIn 0.3s cubic-bezier(.22,1,.36,1);
+  }
+  .edit-row{ display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .edit-row:first-child{ margin-top:0; }
+  .edit-label{ font-size:10px; color: var(--text-faint); width:52px; flex-shrink:0; font-family: var(--font-mono); }
+  .edit-input{
+    flex:1; min-width:0; background: rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+    border-radius:9px; padding:8px 10px; color: var(--text); font-family: var(--font-body);
+    font-size:13px; transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .edit-input:focus{ outline:none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-dim); }
+  .edit-delete{
+    margin-top:10px; text-align:right; font-family: var(--font-mono); font-size:11px;
+    color: var(--text-faint); cursor:pointer; transition: color 0.25s ease, transform 0.2s ease;
+  }
+  .edit-delete:hover{ color: #ff8a8a; transform: translateX(2px); }
+  .edit-card.removing{
+    opacity:0; transform: translateX(-16px) scale(0.97); max-height:0; margin-top:0; padding-top:0; padding-bottom:0; overflow:hidden;
+    transition: opacity 0.25s ease, transform 0.25s ease, max-height 0.3s ease 0.1s, margin-top 0.3s ease 0.1s, padding 0.3s ease 0.1s;
+  }
+
+  @media (max-width: 480px){
+    body{ padding:0; }
+    .phone{ width:100%; border-radius:0; border:none; padding:0; box-shadow:none; }
+    .screen{ border-radius:0; height:100vh; padding:20px 16px; }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="phone">
+    <div class="screen">
+      <div class="glow"></div>
+
+      <div id="dashboardView" class="view active">
+        <div class="eyebrow" id="dashEyebrow">Dashboard</div>
+        <h1>Hey Nico.<br>Let's build the streak.</h1>
+        <p class="sub">Your dashboard — a live view of consistency and rep progress.</p>
+        <div class="db-status" id="dbStatus">Database: checking&hellip;</div>
+
+        <div class="card">
+          <div class="card-title">30-day consistency <span>Mon / Wed / Fri</span></div>
+          <div class="week-row" id="weekRow">
+            <div class="day"><div class="day-label" data-day="1">MON</div><div class="dot" data-day-dot="1"></div></div>
+            <div class="day"><div class="day-label" data-day="2">TUE</div><div class="dot" data-day-dot="2"></div></div>
+            <div class="day"><div class="day-label" data-day="3">WED</div><div class="dot" data-day-dot="3"></div></div>
+            <div class="day"><div class="day-label" data-day="4">THU</div><div class="dot" data-day-dot="4"></div></div>
+            <div class="day"><div class="day-label" data-day="5">FRI</div><div class="dot" data-day-dot="5"></div></div>
+            <div class="day"><div class="day-label" data-day="6">SAT</div><div class="dot" data-day-dot="6"></div></div>
+            <div class="day"><div class="day-label" data-day="0">SUN</div><div class="dot" data-day-dot="0"></div></div>
+          </div>
+          <div class="streak-line">
+            <span class="streak-num" id="streakNum">—</span>
+            <span class="streak-text" id="streakText">streak starts once you log your first workout</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Personal records <span>bodyweight moves</span></div>
+          <div class="stat-grid">
+            <div class="stat"><div class="stat-label">Pull-ups<br>best set</div><input class="stat-input" id="prPullups" inputmode="numeric" placeholder="0"><span class="stat-unit">reps</span></div>
+            <div class="stat"><div class="stat-label">Push-ups<br>AMRAP</div><input class="stat-input" id="prPushups" inputmode="numeric" placeholder="0"><span class="stat-unit">reps</span></div>
+            <div class="stat"><div class="stat-label">Plank<br>hold</div><input class="stat-input" id="prPlank" inputmode="numeric" placeholder="0"><span class="stat-unit">sec</span></div>
+          </div>
+          <div class="placeholder-note">Tap a box to set your PR &mdash; saved for this session until the database is connected.</div>
+        </div>
+
+        <div class="cta" id="startBtn">Start today's workout</div>
+        <div class="cta-secondary" id="editBtn">Edit exercises</div>
+      </div>
+
+      <div id="workoutView" class="view">
+        <div class="top-row">
+          <div>
+            <div class="eyebrow" id="workoutEyebrow">Today's workout</div>
+            <h1 id="workoutTitle">Loading...</h1>
+          </div>
+          <div class="exit" id="exitBtn">Exit</div>
+        </div>
+        <p class="sub" id="exerciseSub">3 of 6 exercises &middot; filler exercises for now, your real routine gets wired in later</p>
+
+        <div class="timer-bar" id="timerBar">
+          <div class="timer-left">
+            <div class="timer-label" id="timerLabel">Rest</div>
+            <div class="timer-num" id="timerNum">1:00</div>
+          </div>
+          <div class="timer-skip" id="timerSkip">Skip</div>
+        </div>
+
+        <div id="exerciseContainer"></div>
+
+        <div class="progress-dots" id="progressDots"></div>
+
+        <div class="cta" id="nextBtn">Next exercise</div>
+        <div class="filler-note">Tap a checkmark to log a set and start the rest timer.</div>
+      </div>
+
+      <div class="splash" id="splashScreen">
+        <div class="splash-check">&#10003;</div>
+        <div class="splash-text">Nice work</div>
+        <div class="splash-sub">Workout logged</div>
+      </div>
+
+      <div id="editView" class="view">
+        <div class="top-row">
+          <div>
+            <div class="eyebrow">Manage routine</div>
+            <h1>Edit exercises</h1>
+          </div>
+          <div class="exit" id="editExit">Done</div>
+        </div>
+        <p class="sub">Changes update instantly &mdash; this session only, until the database is connected.</p>
+
+        <div class="day-tabs" id="dayTabs"></div>
+        <div id="editList"></div>
+
+        <div class="cta-secondary" id="addExerciseBtn">+ Add exercise</div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+  /* ===== DATABASE CONNECTION =====
+     'db' is now the app's real memory. Everything below this still
+     runs on the in-memory routine/completedDates for now — we're
+     wiring the pipe first, then swapping features onto it one at a time. */
+  var SUPABASE_URL = 'https://heaiquuzcauittchwzkv.supabase.co';
+  var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhlYWlxdXV6Y2F1aXR0Y2h3emt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc3NTA1MTIsImV4cCI6MjEwMzMyNjUxMn0.0v900cKR1WyxugXBO5kBjgoom6wrwS5gMc7z0n5nAcY';
+  var db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  var dashboardView = document.getElementById('dashboardView');
+  var workoutView = document.getElementById('workoutView');
+  var startBtn = document.getElementById('startBtn');
+  var exitBtn = document.getElementById('exitBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  var editBtn = document.getElementById('editBtn');
+  var editExit = document.getElementById('editExit');
+  var addExerciseBtn = document.getElementById('addExerciseBtn');
+  var editView = document.getElementById('editView');
+
+  function goTo(view){
+    dashboardView.classList.remove('active');
+    workoutView.classList.remove('active');
+    editView.classList.remove('active');
+    view.classList.add('active');
+  }
+
+  startBtn.addEventListener('click', function(){ goTo(workoutView); loadWorkoutForToday(); });
+  exitBtn.addEventListener('click', function(){ clearProgress(); goTo(dashboardView); });
+
+  var timerBar = document.getElementById('timerBar');
+  var timerNum = document.getElementById('timerNum');
+  var timerSkip = document.getElementById('timerSkip');
+  timerSkip.addEventListener('click', function(){ stopTimer(); });
+  var interval = null;
+  var seconds = 60;
+
+  function formatTime(s){
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  var timerLabelEl = document.getElementById('timerLabel');
+  var completeTimeout = null;
+
+  function startTimer(){
+    if(completeTimeout) clearTimeout(completeTimeout);
+    timerBar.classList.remove('complete');
+    timerLabelEl.textContent = 'Rest';
+    seconds = 60;
+    timerNum.textContent = formatTime(seconds);
+    timerBar.classList.add('active');
+    if(interval) clearInterval(interval);
+    interval = setInterval(function(){
+      seconds -= 1;
+      if(seconds <= 0){
+        clearInterval(interval);
+        timerLabelEl.textContent = "Rest's up";
+        timerNum.textContent = "Let's go";
+        timerBar.classList.add('complete');
+        completeTimeout = setTimeout(function(){
+          timerBar.classList.remove('active','complete');
+        }, 2200);
+        return;
+      }
+      timerNum.textContent = formatTime(seconds);
+    }, 1000);
+  }
+  function stopTimer(){
+    if(interval) clearInterval(interval);
+    if(completeTimeout) clearTimeout(completeTimeout);
+    timerBar.classList.remove('active','complete');
+  }
+
+  function fadeSwapText(el, newText){
+    el.style.opacity = 0;
+    setTimeout(function(){ el.textContent = newText; el.style.opacity = 1; }, 180);
+  }
+
+  /* ===== REAL ROUTINE (your actual plan) + CALENDAR LOGIC =====
+     Single source of truth for "what day is it" and "what's today's
+     workout" — the dashboard and the workout screen both read from
+     this instead of guessing separately.
+     'routine' now gets FILLED from Supabase instead of being typed
+     in here. Same exact shape as before (so nothing else has to
+     change), except each exercise also carries its real database
+     'id' now, needed so we know which row to update/delete. */
+  var routine = {};
+  var routineLoaded = false;
+
+  async function loadRoutineFromDB(){
+    var daysResult = await db.from('workout_days').select('*');
+    var exResult = await db.from('exercises').select('*').order('day_index').order('sort_order');
+
+    if(daysResult.error || exResult.error){
+      console.error('Failed to load routine:', daysResult.error || exResult.error);
+      return false;
+    }
+
+    var loaded = {};
+    daysResult.data.forEach(function(row){
+      loaded[row.day_index] = { name: row.name, exercises: [] };
+    });
+    exResult.data.forEach(function(row){
+      if(!loaded[row.day_index]) loaded[row.day_index] = { name: dayNames[row.day_index] + ' workout', exercises: [] };
+      loaded[row.day_index].exercises.push({
+        id: row.id, name: row.name, sets: row.sets, reps: row.reps, muscle: row.muscle || ''
+      });
+    });
+
+    routine = loaded;
+    routineLoaded = true;
+    return true;
+  }
+
+  /* ===== PERSONAL RECORDS ===== */
+  async function loadPersonalRecords(){
+    var result = await db.from('personal_records').select('*').eq('id', 1).single();
+    if(result.error){
+      console.error('Failed to load personal records:', result.error);
+      return;
+    }
+    var row = result.data;
+    if(row.pullups !== null) document.getElementById('prPullups').value = row.pullups;
+    if(row.pushups !== null) document.getElementById('prPushups').value = row.pushups;
+    if(row.plank !== null) document.getElementById('prPlank').value = row.plank;
+  }
+
+  function savePersonalRecord(field, rawValue){
+    var value = rawValue === '' ? null : parseInt(rawValue, 10);
+    var patch = {}; patch[field] = value;
+    db.from('personal_records').update(patch).eq('id', 1).then(function(result){
+      if(result.error) console.error('Failed to save ' + field + ':', result.error);
+    });
+  }
+
+  document.getElementById('prPullups').addEventListener('change', function(e){ savePersonalRecord('pullups', e.target.value); });
+  document.getElementById('prPushups').addEventListener('change', function(e){ savePersonalRecord('pushups', e.target.value); });
+  document.getElementById('prPlank').addEventListener('change', function(e){ savePersonalRecord('plank', e.target.value); });
+
+  var dayNames = {0:'Sunday',1:'Monday',2:'Tuesday',3:'Wednesday',4:'Thursday',5:'Friday',6:'Saturday'};
+
+  /* ===== EXERCISE EDITOR ===== */
+  var editDay = 1;
+  var dayTabs = document.getElementById('dayTabs');
+  var editList = document.getElementById('editList');
+
+  var allDaysOrder = [1,2,3,4,5,6,0]; // Mon..Sun, matching the rest of the app
+
+  function renderDayTabs(){
+    var html = '';
+    allDaysOrder.forEach(function(di){
+      var label = dayNames[di].slice(0,3).toUpperCase();
+      if(routine.hasOwnProperty(di)){
+        html += '<div class="day-tab' + (di === editDay ? ' active' : '') + '" data-day="' + di + '">' + label + '</div>';
+      } else {
+        html += '<div class="day-tab ghost" data-add-day="' + di + '">+' + label + '</div>';
+      }
+    });
+    dayTabs.innerHTML = html;
+    dayTabs.querySelectorAll('.day-tab[data-day]').forEach(function(tab){
+      tab.addEventListener('click', function(){
+        editDay = parseInt(tab.getAttribute('data-day'), 10);
+        renderDayTabs();
+        renderEditList();
+      });
+    });
+    dayTabs.querySelectorAll('.day-tab.ghost').forEach(function(tab){
+      tab.addEventListener('click', async function(){
+        var di = parseInt(tab.getAttribute('data-add-day'), 10);
+        var name = dayNames[di] + ' workout';
+        routine[di] = { name: name, exercises: [] };
+        editDay = di;
+        renderDayTabs();
+        renderEditList();
+        var result = await db.from('workout_days').insert({ day_index: di, name: name });
+        if(result.error) console.error('Failed to save new day:', result.error);
+      });
+    });
+  }
+
+  function renderEditList(){
+    var exList = routine[editDay].exercises;
+    var dayCount = Object.keys(routine).length;
+    var html = '<div class="day-header">' +
+      '<span class="day-header-name">' + routine[editDay].name + '</span>' +
+      (dayCount > 1 ? '<span class="remove-day" id="removeDayBtn">Remove this day</span>' : '') +
+      '</div>';
+    if(exList.length === 0){
+      html += '<div class="filler-note">No exercises yet &mdash; use "+ Add exercise" below to build this day out.</div>';
+    }
+    exList.forEach(function(ex, i){
+      html += '<div class="edit-card" data-index="' + i + '">' +
+        '<div class="edit-row"><div class="edit-label">Name</div><input class="edit-input field-name" value="' + ex.name + '"></div>' +
+        '<div class="edit-row"><div class="edit-label">Sets</div><input class="edit-input field-sets" inputmode="numeric" value="' + ex.sets + '"></div>' +
+        '<div class="edit-row"><div class="edit-label">Reps</div><input class="edit-input field-reps" value="' + ex.reps + '"></div>' +
+        '<div class="edit-row"><div class="edit-label">Muscle</div><input class="edit-input field-muscle" value="' + ex.muscle + '"></div>' +
+        '<div class="edit-delete">Remove</div>' +
+        '</div>';
+    });
+    editList.innerHTML = html;
+
+    editList.querySelectorAll('.edit-card').forEach(function(card){
+      var idx = parseInt(card.getAttribute('data-index'), 10);
+
+      function saveField(field, value){
+        var ex = exList[idx];
+        if(!ex.id) return; // not saved to DB yet (shouldn't normally happen)
+        var patch = {}; patch[field] = value;
+        db.from('exercises').update(patch).eq('id', ex.id).then(function(result){
+          if(result.error) console.error('Failed to save ' + field + ':', result.error);
+        });
+      }
+
+      var nameInput = card.querySelector('.field-name');
+      nameInput.addEventListener('input', function(e){ exList[idx].name = e.target.value; });
+      nameInput.addEventListener('change', function(e){ saveField('name', e.target.value); });
+
+      var setsInput = card.querySelector('.field-sets');
+      setsInput.addEventListener('input', function(e){ exList[idx].sets = parseInt(e.target.value, 10) || 1; });
+      setsInput.addEventListener('change', function(){ saveField('sets', exList[idx].sets); });
+
+      var repsInput = card.querySelector('.field-reps');
+      repsInput.addEventListener('input', function(e){ exList[idx].reps = e.target.value; });
+      repsInput.addEventListener('change', function(e){ saveField('reps', e.target.value); });
+
+      var muscleInput = card.querySelector('.field-muscle');
+      muscleInput.addEventListener('input', function(e){ exList[idx].muscle = e.target.value; });
+      muscleInput.addEventListener('change', function(e){ saveField('muscle', e.target.value); });
+
+      card.querySelector('.edit-delete').addEventListener('click', function(){
+        card.classList.add('removing');
+        var exId = exList[idx].id;
+        setTimeout(function(){
+          exList.splice(idx, 1);
+          renderEditList();
+        }, 380);
+        if(exId){
+          db.from('exercises').delete().eq('id', exId).then(function(result){
+            if(result.error) console.error('Failed to delete exercise:', result.error);
+          });
+        }
+      });
+    });
+
+    var removeDayBtn = document.getElementById('removeDayBtn');
+    if(removeDayBtn){
+      removeDayBtn.addEventListener('click', async function(){
+        var name = routine[editDay].name;
+        var ok = confirm('Remove "' + name + '" entirely? This deletes all its exercises too.');
+        if(!ok) return;
+        var dayToRemove = editDay;
+        delete routine[editDay];
+        editDay = parseInt(Object.keys(routine)[0], 10);
+        renderDayTabs();
+        renderEditList();
+        await db.from('exercises').delete().eq('day_index', dayToRemove);
+        await db.from('workout_days').delete().eq('day_index', dayToRemove);
+      });
+    }
+  }
+
+  editBtn.addEventListener('click', function(){
+    editDay = getActiveDayIndex();
+    goTo(editView);
+    renderDayTabs();
+    renderEditList();
+  });
+
+  editExit.addEventListener('click', function(){
+    goTo(dashboardView);
+    renderCalendar();
+  });
+
+  addExerciseBtn.addEventListener('click', async function(){
+    var newEx = { name: 'New exercise', sets: 3, reps: '10', muscle: '' };
+    var sortOrder = routine[editDay].exercises.length;
+    var result = await db.from('exercises').insert({
+      day_index: editDay, name: newEx.name, sets: newEx.sets, reps: newEx.reps, muscle: newEx.muscle, sort_order: sortOrder
+    }).select().single();
+
+    if(result.error){
+      console.error('Failed to add exercise:', result.error);
+      alert('Could not save the new exercise — check your connection and try again.');
+      return;
+    }
+    newEx.id = result.data.id;
+    routine[editDay].exercises.push(newEx);
+    renderEditList();
+  });
+
+  function getActiveDayIndex(){
+    var todayIndex = new Date().getDay();
+    if(routine.hasOwnProperty(todayIndex)) return todayIndex;
+    var next = todayIndex;
+    for(var i = 1; i <= 7; i++){
+      next = (todayIndex + i) % 7;
+      if(routine.hasOwnProperty(next)) break;
+    }
+    return next;
+  }
+
+  var activeDay = null;
+  var exercises = [];
+  var currentExercise = 0;
+  var exerciseContainer = document.getElementById('exerciseContainer');
+  var progressDots = document.getElementById('progressDots');
+  var exerciseSub = document.getElementById('exerciseSub');
+  var workoutTitle = document.getElementById('workoutTitle');
+  var workoutEyebrow = document.getElementById('workoutEyebrow');
+
+  function renderExercise(existingLogs){
+    existingLogs = existingLogs || {};
+    var ex = exercises[currentExercise];
+    var target = ex.sets + ' \u00D7 ' + ex.reps;
+    var html = '<div class="exercise current"><div class="ex-head">' +
+      '<div class="ex-name">' + ex.name + '</div><div class="ex-target">' + target + '</div></div>' +
+      '<div class="ex-muscle">' + ex.muscle + '</div>';
+    for(var s = 1; s <= ex.sets; s++){
+      var logRow = existingLogs[s];
+      var doneClass = logRow ? ' done' : '';
+      var logIdAttr = logRow ? ' data-log-id="' + logRow.id + '"' : '';
+      var repsVal = (logRow && logRow.reps != null) ? logRow.reps : '';
+      var noteVal = (logRow && logRow.note) ? logRow.note : '';
+      html += '<div class="set-block" data-set="' + s + '">' +
+        '<div class="set-row"><div class="set-tag">SET ' + s + '</div>' +
+        '<div class="set-check log-set' + doneClass + '"' + logIdAttr + '>&#10003;</div>' +
+        '<input class="set-input" placeholder="reps" inputmode="numeric" value="' + repsVal + '"></div>' +
+        '<div class="note-row"><div class="note-label">equipment note (optional, not tracked as a stat)</div>' +
+        '<input class="note-input" placeholder="e.g. small pair, big pair, bodyweight" value="' + noteVal + '"></div>' +
+        '</div>';
+    }
+    html += '</div>';
+    exerciseContainer.innerHTML = html;
+
+    var newChecks = exerciseContainer.querySelectorAll('.log-set');
+    newChecks.forEach(function(el){
+      el.addEventListener('click', function(){
+        el.classList.toggle('done');
+        var block = el.closest('.set-block');
+        if(el.classList.contains('done')){
+          startTimer();
+          var setNum = parseInt(block.getAttribute('data-set'), 10);
+          var repsVal = block.querySelector('.set-input').value;
+          var noteVal = block.querySelector('.note-input').value;
+          db.from('logs').insert({
+            exercise_id: ex.id,
+            set_number: setNum,
+            reps: repsVal === '' ? null : parseInt(repsVal, 10),
+            note: noteVal === '' ? null : noteVal
+          }).select().single().then(function(result){
+            if(result.error) console.error('Failed to save set:', result.error);
+            else el.dataset.logId = result.data.id;
+          });
+        } else {
+          var logId = el.dataset.logId;
+          if(logId){
+            db.from('logs').delete().eq('id', logId).then(function(result){
+              if(result.error) console.error('Failed to delete set log:', result.error);
+            });
+            delete el.dataset.logId;
+          }
+        }
+      });
+    });
+
+    exerciseSub.textContent = (currentExercise + 1) + ' of ' + exercises.length + ' exercises \u00B7 your real routine';
+
+    var dotsHtml = '';
+    for(var i = 0; i < exercises.length; i++){
+      var cls = 'pdot';
+      if(i < currentExercise) cls += ' done';
+      if(i === currentExercise) cls += ' now';
+      dotsHtml += '<div class="' + cls + '"></div>';
+    }
+    progressDots.innerHTML = dotsHtml;
+
+    nextBtn.textContent = (currentExercise === exercises.length - 1) ? 'Finish workout' : 'Next exercise';
+  }
+
+  function saveProgress(){
+    localStorage.setItem('workoutProgress', JSON.stringify({ day: activeDay, exercise: currentExercise }));
+  }
+  function clearProgress(){
+    localStorage.removeItem('workoutProgress');
+  }
+
+  function loadWorkoutForToday(){
+    activeDay = getActiveDayIndex();
+    exercises = routine[activeDay].exercises;
+    currentExercise = 0;
+    workoutEyebrow.textContent = (new Date().getDay() === activeDay) ? "Today's workout" : 'Next scheduled workout';
+    fadeSwapText(workoutTitle, routine[activeDay].name);
+    saveProgress();
+    renderExercise();
+  }
+
+  /* Picks back up a workout that was interrupted by a refresh.
+     'workoutProgress' in localStorage just remembers WHICH exercise
+     you were on (per-device, doesn't need the database). The actual
+     checked sets/reps come from the real 'logs' table, same source
+     of truth as everything else. */
+  async function tryResumeWorkout(){
+    var saved = localStorage.getItem('workoutProgress');
+    if(!saved) return false;
+    var progress;
+    try { progress = JSON.parse(saved); } catch(e){ return false; }
+    if(!progress || !routine.hasOwnProperty(progress.day)) return false;
+
+    activeDay = progress.day;
+    exercises = routine[activeDay].exercises;
+    currentExercise = Math.min(progress.exercise || 0, exercises.length - 1);
+    var ex = exercises[currentExercise];
+    if(!ex || !ex.id) return false;
+
+    var todayStr = todayKey();
+    var existingLogs = {};
+    var result = await db.from('logs').select('id, set_number, reps, note, logged_at').eq('exercise_id', ex.id);
+    if(!result.error && result.data){
+      result.data.forEach(function(row){
+        if(row.logged_at && row.logged_at.slice(0,10) === todayStr){
+          existingLogs[row.set_number] = row;
+        }
+      });
+    }
+
+    workoutEyebrow.textContent = (new Date().getDay() === activeDay) ? "Today's workout" : 'Next scheduled workout';
+    fadeSwapText(workoutTitle, routine[activeDay].name);
+    renderExercise(existingLogs);
+    goTo(workoutView);
+    return true;
+  }
+
+  var completedDates = []; // e.g. '2026-08-18' — lives only for this session until the database is wired in
+
+  function todayKey(){
+    var d = new Date();
+    var m = String(d.getMonth()+1).padStart(2,'0');
+    var day = String(d.getDate()).padStart(2,'0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
+
+  function showSplash(){
+    return new Promise(function(resolve){
+      var splash = document.getElementById('splashScreen');
+      splash.classList.add('active');
+      setTimeout(function(){
+        splash.classList.add('fade-out');
+        setTimeout(function(){
+          splash.classList.remove('active','fade-out');
+          resolve();
+        }, 300);
+      }, 1700);
+    });
+  }
+
+  nextBtn.addEventListener('click', function(){
+    stopTimer();
+    if(currentExercise < exercises.length - 1){
+      currentExercise += 1;
+      saveProgress();
+      renderExercise();
+    } else {
+      currentExercise = 0;
+      clearProgress();
+      var key = todayKey();
+      if(completedDates.indexOf(key) === -1) completedDates.push(key);
+      
+      // Save to database
+      db.from('sessions').insert({
+        day_index: activeDay,
+        completed_date: key
+      }).then(function(result){
+        if(result.error) console.error('Failed to save session:', result.error);
+      });
+      
+      showSplash().then(function(){
+        goTo(dashboardView);
+        renderCalendar();
+      });
+    }
+  });
+
+  async function renderCalendar(){
+    var now = new Date();
+    var todayIndex = now.getDay();
+    
+    // Load completed workouts from database
+    var sessionsResult = await db.from('sessions').select('completed_date');
+    var completedDays = {};
+    if(!sessionsResult.error && sessionsResult.data){
+      sessionsResult.data.forEach(function(row){
+        completedDays[row.completed_date] = true;
+      });
+    }
+    
+    var completedToday = completedDays[todayKey()] ? true : false;
+
+    document.querySelectorAll('.dot[data-day-dot]').forEach(function(dot){
+      var d = parseInt(dot.getAttribute('data-day-dot'), 10);
+      dot.classList.remove('today','workout-day','done');
+      if(routine.hasOwnProperty(d)) dot.classList.add('workout-day');
+      if(d === todayIndex) dot.classList.add('today');
+      if(d === todayIndex && completedToday) dot.classList.add('done');
+    });
+    document.querySelectorAll('.day-label').forEach(function(label){
+      var d = parseInt(label.getAttribute('data-day'), 10);
+      label.classList.toggle('today-label', d === todayIndex);
+    });
+
+    var dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    document.getElementById('dashEyebrow').textContent = 'Dashboard \u00B7 ' + dateStr;
+
+    var streakNum = document.getElementById('streakNum');
+    streakNum.textContent = Object.keys(completedDays).length;
+
+    var streakText = document.getElementById('streakText');
+    if(completedToday){
+      fadeSwapText(streakText, 'workout logged \u00B7 nice work today');
+    } else if(routine.hasOwnProperty(todayIndex)){
+      fadeSwapText(streakText, "today's workout: " + routine[todayIndex].name);
+    } else {
+      var next = getActiveDayIndex();
+      fadeSwapText(streakText, 'rest day \u00B7 next up: ' + dayNames[next] + ', ' + routine[next].name);
+    }
+  }
+
+  /* ===== STARTUP =====
+     Nothing that depends on 'routine' runs until the real data has
+     actually loaded from the database — this is what stops the app
+     from breaking on a fresh page load. */
+  async function init(){
+    startBtn.classList.add('disabled');
+    editBtn.classList.add('disabled');
+    var statusEl = document.getElementById('dbStatus');
+    statusEl.textContent = 'Database: loading your routine\u2026';
+
+    var ok = false;
+    try {
+      ok = await loadRoutineFromDB();
+    } catch(e){
+      ok = false;
+    }
+
+    if(ok){
+      statusEl.textContent = 'Database: connected \u2713';
+      statusEl.classList.add('ok');
+      startBtn.classList.remove('disabled');
+      editBtn.classList.remove('disabled');
+      renderCalendar();
+      loadPersonalRecords();
+      try { await tryResumeWorkout(); } catch(e){ console.error('Resume failed:', e); }
+    } else {
+      statusEl.textContent = 'Database: could not load your routine \u2014 check your connection and reload';
+      statusEl.classList.add('error');
+      // Buttons stay disabled on purpose: starting a workout or editing
+      // with no real data loaded would break rather than just look empty.
+    }
+  }
+  init();
+</script>
+</body>
+</html>
