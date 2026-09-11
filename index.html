@@ -23,6 +23,10 @@
     --font-body: 'Inter', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
   }
+  html{
+    background: var(--bg);
+    height: 100%;
+  }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
     background: radial-gradient(circle at 20% -10%, #151a24 0%, var(--bg) 45%);
@@ -32,6 +36,7 @@
     justify-content:center;
     padding: 40px 16px;
     min-height: 100vh;
+    min-height: 100dvh;
   }
   .phone{
     width: 390px;
