@@ -333,6 +333,15 @@
     color: var(--text-faint); cursor:pointer; transition: color 0.25s ease, transform 0.2s ease;
   }
   .edit-delete:hover{ color: #ff8a8a; transform: translateX(2px); }
+  .card-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
+  .reorder-btns{ display:flex; gap:8px; }
+  .reorder-btn{
+    font-family: var(--font-mono); font-size:13px; color: var(--text-dim);
+    border:1px solid var(--glass-border); border-radius:6px; padding:2px 8px;
+    cursor:pointer; transition: border-color 0.2s ease, color 0.2s ease;
+  }
+  .reorder-btn:hover{ border-color: var(--accent); color: var(--accent); }
+  .reorder-btn.disabled{ opacity:0.25; pointer-events:none; }
   .edit-card.removing{
     opacity:0; transform: translateX(-16px) scale(0.97); max-height:0; margin-top:0; padding-top:0; padding-bottom:0; overflow:hidden;
     transition: opacity 0.25s ease, transform 0.25s ease, max-height 0.3s ease 0.1s, margin-top 0.3s ease 0.1s, padding 0.3s ease 0.1s;
@@ -619,11 +628,30 @@
     });
   }
 
+  function escAttr(str){
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function moveExercise(idx, direction){
+    var exList = routine[editDay].exercises;
+    var newIdx = idx + direction;
+    if(newIdx < 0 || newIdx >= exList.length) return;
+    var itemA = exList[idx];
+    var itemB = exList[newIdx];
+    exList[idx] = itemB;
+    exList[newIdx] = itemA;
+    renderEditList();
+    if(itemB.id) db.from('exercises').update({ sort_order: idx }).eq('id', itemB.id).then(function(r){ if(r.error) console.error(r.error); });
+    if(itemA.id) db.from('exercises').update({ sort_order: newIdx }).eq('id', itemA.id).then(function(r){ if(r.error) console.error(r.error); });
+  }
+
   function renderEditList(){
     var exList = routine[editDay].exercises;
     var dayCount = Object.keys(routine).length;
     var html = '<div class="day-header">' +
-      '<span class="day-header-name">' + routine[editDay].name + '</span>' +
+      '<span class="day-header-name">' + escAttr(routine[editDay].name) + '</span>' +
       (dayCount > 1 ? '<span class="remove-day" id="removeDayBtn">Remove this day</span>' : '') +
       '</div>';
     if(exList.length === 0){
@@ -631,11 +659,17 @@
     }
     exList.forEach(function(ex, i){
       html += '<div class="edit-card" data-index="' + i + '">' +
-        '<div class="edit-row"><div class="edit-label">Name</div><input class="edit-input field-name" value="' + ex.name + '"></div>' +
-        '<div class="edit-row"><div class="edit-label">Sets</div><input class="edit-input field-sets" inputmode="numeric" value="' + ex.sets + '"></div>' +
-        '<div class="edit-row"><div class="edit-label">Reps</div><input class="edit-input field-reps" value="' + ex.reps + '"></div>' +
-        '<div class="edit-row"><div class="edit-label">Muscle</div><input class="edit-input field-muscle" value="' + ex.muscle + '"></div>' +
-        '<div class="edit-delete">Remove</div>' +
+        '<div class="edit-row"><div class="edit-label">Name</div><input class="edit-input field-name" value="' + escAttr(ex.name) + '"></div>' +
+        '<div class="edit-row"><div class="edit-label">Sets</div><input class="edit-input field-sets" inputmode="numeric" value="' + escAttr(ex.sets) + '"></div>' +
+        '<div class="edit-row"><div class="edit-label">Reps</div><input class="edit-input field-reps" value="' + escAttr(ex.reps) + '"></div>' +
+        '<div class="edit-row"><div class="edit-label">Muscle</div><input class="edit-input field-muscle" value="' + escAttr(ex.muscle) + '"></div>' +
+        '<div class="card-actions">' +
+          '<div class="reorder-btns">' +
+            '<span class="reorder-btn' + (i === 0 ? ' disabled' : '') + '" data-move="up">&uarr;</span>' +
+            '<span class="reorder-btn' + (i === exList.length - 1 ? ' disabled' : '') + '" data-move="down">&darr;</span>' +
+          '</div>' +
+          '<div class="edit-delete">Remove</div>' +
+        '</div>' +
         '</div>';
     });
     editList.innerHTML = html;
@@ -680,6 +714,13 @@
             if(result.error) console.error('Failed to delete exercise:', result.error);
           });
         }
+      });
+
+      card.querySelectorAll('.reorder-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var dir = btn.getAttribute('data-move') === 'up' ? -1 : 1;
+          moveExercise(idx, dir);
+        });
       });
     });
 
