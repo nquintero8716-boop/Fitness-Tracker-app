@@ -229,9 +229,9 @@
   .set-input::placeholder{ color: var(--text-faint); }
   .set-input:focus{ outline:none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-dim); transform: scale(1.015); }
   .set-check{
-    width:34px; height:34px; border-radius:10px; flex-shrink:0; margin-right:2px;
+    flex:1; height:44px; border-radius:10px;
     border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center;
-    font-size:15px; color: var(--text-faint); cursor:pointer;
+    font-size:16px; color: var(--text-faint); cursor:pointer;
     transition: transform 0.25s cubic-bezier(.34,1.56,.64,1), background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
   }
   .set-check:active{ transform: scale(0.85); }
@@ -482,7 +482,7 @@
   var timerSkip = document.getElementById('timerSkip');
   timerSkip.addEventListener('click', function(){ stopTimer(); });
   var interval = null;
-  var seconds = 60;
+  var timerEndAt = null;
 
   function formatTime(s){
     var m = Math.floor(s / 60);
@@ -492,34 +492,45 @@
   var timerLabelEl = document.getElementById('timerLabel');
   var completeTimeout = null;
 
-  function startTimer(){
+  function tickTimer(){
+    var remaining = Math.ceil((timerEndAt - Date.now()) / 1000);
+    if(remaining <= 0){
+      clearInterval(interval);
+      timerLabelEl.textContent = "Rest's up";
+      timerNum.textContent = "Let's go";
+      timerBar.classList.add('complete');
+      completeTimeout = setTimeout(function(){
+        timerBar.classList.remove('active','complete');
+      }, 2200);
+      return;
+    }
+    timerNum.textContent = formatTime(remaining);
+  }
+
+  function startTimer(durationSeconds){
     if(completeTimeout) clearTimeout(completeTimeout);
     timerBar.classList.remove('complete');
     timerLabelEl.textContent = 'Rest';
-    seconds = 60;
-    timerNum.textContent = formatTime(seconds);
+    timerEndAt = Date.now() + (durationSeconds || 30) * 1000;
+    timerNum.textContent = formatTime(durationSeconds || 30);
     timerBar.classList.add('active');
     if(interval) clearInterval(interval);
-    interval = setInterval(function(){
-      seconds -= 1;
-      if(seconds <= 0){
-        clearInterval(interval);
-        timerLabelEl.textContent = "Rest's up";
-        timerNum.textContent = "Let's go";
-        timerBar.classList.add('complete');
-        completeTimeout = setTimeout(function(){
-          timerBar.classList.remove('active','complete');
-        }, 2200);
-        return;
-      }
-      timerNum.textContent = formatTime(seconds);
-    }, 1000);
+    interval = setInterval(tickTimer, 1000);
   }
   function stopTimer(){
     if(interval) clearInterval(interval);
     if(completeTimeout) clearTimeout(completeTimeout);
+    timerEndAt = null;
     timerBar.classList.remove('active','complete');
   }
+  // Phones pause/throttle timers while backgrounded — this forces the
+  // display to catch up the instant the app becomes visible again,
+  // instead of waiting on a possibly-delayed tick.
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible' && timerEndAt !== null){
+      tickTimer();
+    }
+  });
 
   function fadeSwapText(el, newText){
     el.style.opacity = 0;
@@ -801,12 +812,10 @@
       var logRow = existingLogs[s];
       var doneClass = logRow ? ' done' : '';
       var logIdAttr = logRow ? ' data-log-id="' + logRow.id + '"' : '';
-      var repsVal = (logRow && logRow.reps != null) ? logRow.reps : '';
       var noteVal = (logRow && logRow.note) ? logRow.note : '';
       html += '<div class="set-block" data-set="' + s + '">' +
         '<div class="set-row"><div class="set-tag">SET ' + s + '</div>' +
-        '<div class="set-check log-set' + doneClass + '"' + logIdAttr + '>&#10003;</div>' +
-        '<input class="set-input" placeholder="reps" inputmode="numeric" value="' + repsVal + '"></div>' +
+        '<div class="set-check log-set' + doneClass + '"' + logIdAttr + '>&#10003;</div></div>' +
         '<div class="note-row"><div class="note-label">equipment note (optional, not tracked as a stat)</div>' +
         '<input class="note-input" placeholder="e.g. small pair, big pair, bodyweight" value="' + noteVal + '"></div>' +
         '</div>';
@@ -820,14 +829,13 @@
         el.classList.toggle('done');
         var block = el.closest('.set-block');
         if(el.classList.contains('done')){
-          startTimer();
           var setNum = parseInt(block.getAttribute('data-set'), 10);
-          var repsVal = block.querySelector('.set-input').value;
+          startTimer(setNum === ex.sets ? 60 : 30);
           var noteVal = block.querySelector('.note-input').value;
           db.from('logs').insert({
             exercise_id: ex.id,
             set_number: setNum,
-            reps: repsVal === '' ? null : parseInt(repsVal, 10),
+            reps: null,
             note: noteVal === '' ? null : noteVal
           }).select().single().then(function(result){
             if(result.error) console.error('Failed to save set:', result.error);
@@ -914,11 +922,34 @@
 
   var completedDates = []; // e.g. '2026-08-18' — lives only for this session until the database is wired in
 
-  function todayKey(){
-    var d = new Date();
+  function dateKeyFor(d){
     var m = String(d.getMonth()+1).padStart(2,'0');
     var day = String(d.getDate()).padStart(2,'0');
     return d.getFullYear() + '-' + m + '-' + day;
+  }
+
+  function calculateStreak(completedDays){
+    var streak = 0;
+    var cursor = new Date();
+    var today = todayKey();
+    for(var i = 0; i < 3650; i++){
+      var dow = cursor.getDay();
+      var key = dateKeyFor(cursor);
+      if(routine.hasOwnProperty(dow)){
+        if(completedDays[key]){
+          streak++;
+        } else if(key !== today){
+          break; // a past scheduled workout day was missed — streak ends here
+        }
+        // if it's today and not done yet, don't break — just don't count it, keep looking back
+      }
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  }
+
+  function todayKey(){
+    return dateKeyFor(new Date());
   }
 
   function showSplash(){
@@ -993,7 +1024,7 @@
     document.getElementById('dashEyebrow').textContent = 'Dashboard \u00B7 ' + dateStr;
 
     var streakNum = document.getElementById('streakNum');
-    streakNum.textContent = Object.keys(completedDays).length;
+    streakNum.textContent = calculateStreak(completedDays);
 
     var streakText = document.getElementById('streakText');
     if(completedToday){
